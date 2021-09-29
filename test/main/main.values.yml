@@ -1,0 +1,7 @@
+name: "prova"
+imageName: "provina"
+containerName: "provina-1"
+ports: 
+  - 80804
+  - 8081
+  - 89081
