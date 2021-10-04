@@ -1,4 +1,4 @@
-# FROM ./template/service.yml
+# FROM ../template/service.yml
 dummy: dummy
 ---
 apiVersion: env(NAME)
