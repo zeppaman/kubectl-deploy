@@ -4,3 +4,5 @@ dummy: dummy
 apiVersion: env(NAME)
 ---
 dummy: dummy
+---
+dummy: dummy
