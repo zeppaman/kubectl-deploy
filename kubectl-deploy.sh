@@ -1,110 +1,150 @@
 #!/bin/bash
 
-curl -s  -L https://raw.githubusercontent.com/TekWizely/bash-tpl/main/bash-tpl --output /usr/bin/bash-tpl.sh && chmod +x /usr/bin/bash-tpl.sh
+# Regular Colors
+Black='\033[0;30m'        # Black
+Red='\033[0;31m'          # Red
+Green='\033[0;32m'        # Green
+Yellow='\033[0;33m'       # Yellow
+Blue='\033[0;34m'         # Blue
+Purple='\033[0;35m'       # Purple
+Cyan='\033[0;36m'         # Cyan
+White='\033[0;37m'        # White
+NC='\033[0m'
 
-# # wget https://github.com/mikefarah/yq/releases/download/v4.13.2/yq_linux_amd64 -O /usr/bin/yq && chmod +x /usr/bin/yq
+ARGS=$@;
+BASEDIR="./";
+APPNAME="";
+options=$(getopt -l "list,deploy,help,app:,environment:,trace" -o "l,d,h,a:,e:,t" -a -- "$@")
+trace=false
 
-# # chmod +x *
-# pwd 
-# echo "$@"
-# currentDir="$(pwd)"
-# bargspath="$currentDir/bargs.sh"
+declare -A values=( )
 
-# source $bargspath "$@"
-#  getopts ":s:p:" o;
-#  echo ${o};
-
-options=$(getopt -l "list,deploy,help,app:,environment:" -o "l,d,h,a:,e:" -a -- "$@")
-
-eval set -- "$options"
-
-
-
-COMMAND='help'
-while true; do
-    echo "$1";
-    case "$1" in
-        -l|--list)
-            COMMAND="list";        
-            ;;
-        -h|--help)
-           COMMAND="help";
-           ;;
-         -d|--deploy)
-           COMMAND="deploy";
-            ;;
-         -a|--app)
-            shift    
-            APPNAME=$1;
-            ;;
-          -e|--env)
-            shift    
-            ENVIRONMENT=$1;
-            ;;
-          --) shift ; break ;;
-        *) 
-            echo "Internal error!" ; exit 1 ;;
-    esac
-    shift
-done
-
-echo $1
-
-shift $((OPTIND-1))
-
-BASEDIR=$(realpath $1)
-
-echo working on $BASEDIR
-
-echo "COMMAND $COMMAND";
-
-declare -A apps=( )
-
-# append folder
-# for i in $(ls -d $BASEDIR/*/); do 
-#     path="${i%%/}"
-#     name=$(basename $path )
-#     echo "APP FOUND FROM FOLDER $name $path";
-#     len=${#apps[@]}
-#     apps[$name]=path
-# done
-
-#append files
-for i in $(find $BASEDIR -maxdepth 1 -type f -regex '.*\.yml'); do 
-    trimmed="${i//[^.]}"
-    if [ "${#trimmed}" -eq 1 ]; then #./xyx.yml 
+function read_apps()
+{
+    echo -e "${Green} available apps ${White}"
+    for i in $(ls -d $BASEDIR/*/); do 
+    
         path="${i%%/}"
-        name=$(basename $path .yml )
-        echo "APP FOUND FROM FILE $name $path";
+        name=$(basename $path )
+        
+        if [[ $name == 'template' ]]; then
+            continue;
+        fi;
+        echo "  - APP FOUND FROM FOLDER $name $path";
         len=${#apps[@]}
-        apps[$name]=${i%%/}
-    fi
-done
+        apps[$name]=path
+    done
+
+    #append files
+    for i in $(find $BASEDIR -maxdepth 1 -type f -regex '.*\.yml'); do 
+        trimmed="${i//[^.]}"
+        if [ "${#trimmed}" -eq 1 ]; then #./xyx.yml 
+            path="${i%%/}"
+            name=$(basename $path .yml )
+            echo "  - APP FOUND FROM FILE $name $path";
+            len=${#apps[@]}
+            apps[$name]=${i%%/}
+        fi
+    done
+}
+
+function check_install()
+{
+    echo "checking install";
+    if  { [ -x "$(command -v bash-tpl)" ] && ! [  -f ./baseh-tpl.sh ]; };  then
+        echo -e "${Yellow}Error: bash-tpl is not installed. installing" 
+        curl -s  -L https://raw.githubusercontent.com/TekWizely/bash-tpl/main/bash-tpl --output /usr/bin/bash-tpl.sh && chmod +x /usr/bin/bash-tpl.sh
+    fi;
+}
+
+function input_parse()
+{
+    eval set -- "$options"
+    COMMAND='help'
+    while true; do
+        case "$1" in
+            -l|--list)
+                COMMAND="list";        
+                ;;
+            -h|--help)
+            COMMAND="help";
+            ;;
+            -d|--deploy)
+            COMMAND="deploy";
+                ;;
+            -t|--trace)
+            trace=true;
+                ;;
+            -a|--app)
+                shift    
+                APPNAME=$1;
+                ;;
+            -e|--env)
+                shift    
+                ENVIRONMENT=$1;
+                ;;
+            --) shift ; break ;;
+            *) 
+                echo "Internal error!" ; exit 1 ;;
+        esac
+        shift
+    done
+    shift $((OPTIND-1))
+    echo "args: $1"
+    BASEDIR=$(realpath $1)
+    
+
+   
+
+}
+
+function colEcho( )
+{
+    message=$1;
+    color=$2;
+    echo -e "${color}  ${message} ${NC}"
+   
+}
+
+function condCat( )
+{
+    file=$1;
+    condition=$2;    
+
+    if [ $condition = true ]; then
+        colEcho "---" $Blue
+        colEcho  "$file"  $Blue
+        colEcho "---" $Blue
+        cat $file
+        colEcho "---" $Blue
+    fi;
+}
 
 
-if [ $COMMAND = "list" ]
-    then
-    echo "APP LISTING"
+function print_input()
+{
+    colEcho "working on $BASEDIR" $White
+    colEcho "COMMAND $COMMAND" $White;
+}
+
+function app_listing()
+{
+    colEcho "APP LISTING" $Purple
 
     for i in "${!apps[@]}"
     do 
       echo "$i: ${apps[$i]}"
     done
-fi;
+}
 
-
-if [ "${COMMAND}" = 'deploy' ] 
-    then
-
-    echo "APP DEPLOY $APPNAME"
+function deploy_app()
+{
+    tmpFolder=$(mktemp -d);
+    echo -e "${Yellow} APP DEPLOY $APPNAME ${White} "
     templateBase=${apps[$APPNAME]}
     valueBase=${templateBase/yml/values\.yml};
-
-    valuesMerged=$(mktemp)
-
     
-    declare -A values=( )
-
+    valuesMerged=$tmpFolder'/valuesMerged.yml'
     
     values[0]=$valueBase;
 
@@ -120,8 +160,8 @@ if [ "${COMMAND}" = 'deploy' ]
       yq eval-all '. as $item ireduce ({}; . * $item )'  $valuesMerged ${values[$i]}  > $valuesMerged
     done;
 
-    echo "VALUES MERGED $valuesMerged"
-    cat $valuesMerged
+    echo "VALUES MERGED in $valuesMerged"
+    condCat $valuesMerged $trace
     #replace
     VARS=$(yq eval '.. | select((tag == "!!map" or tag == "!!seq") | not) | (path | join("_")) + "=" + .' $valuesMerged | sed 's/: /=/')
     export VALUES=$valuesMerged
@@ -145,16 +185,18 @@ if [ "${COMMAND}" = 'deploy' ]
             echo normalized $sourceTemplate
         fi;
         
-        temp_file=$(mktemp)
+        temp_file=$tmpFolder'/tmpTemplate.sh'
+        templateBase=$tmpFolder'/templateBuild.yml'
         echo "generating template from source $sourceTemplate, on ${BASEDIR} > $temp_file"
       
-        chmod +x $temp_file
+        
         # bind tra valore e origine
-        bash-tpl.sh  $sourceTemplate  > ${temp_file}01
-        cat  ${temp_file}01     
-        sh  ${temp_file}01 >  ${temp_file}02
-        templateBase= ${temp_file}02
-        cat  ${temp_file}02    
+        bash-tpl.sh  $sourceTemplate  > ${temp_file}
+        chmod +x $temp_file
+
+        condCat ${temp_file}    $trace
+        sh  ${temp_file} >  ${templateBase}
+        condCat ${templateBase}  $trace
     fi;
 
     templates[0]=$templateBase;
@@ -165,9 +207,9 @@ if [ "${COMMAND}" = 'deploy' ]
     fi;
 
     echo "Template escalation"
-    templateMerged=$(mktemp)
+    templateMerged=$tmpFolder'/templateMerged.yml'
    
-    finalOutput=$(mktemp)
+    finalOutput=$tmpFolder'/finalOutput.yml'
 
     for i in "${!templates[@]}"
     do 
@@ -177,7 +219,7 @@ if [ "${COMMAND}" = 'deploy' ]
 
 
     echo "VALUES MERGED $templateMerged"
-    cat $templateMerged
+    condCat $templateMerged $trace
     #create values hierarchy
 
 
@@ -188,41 +230,29 @@ if [ "${COMMAND}" = 'deploy' ]
     done
     envsubst < $templateMerged > $finalOutput
 
-    cat  $finalOutput
+    condCat $finalOutput $trace
+}
+
+check_install
+input_parse
+print_input
+
+declare -A apps=( )
+read_apps
+
+# command app listing
+if [ $COMMAND = "list" ]; then
+    app_listing
 fi;
 
 
-# cat ./test/template/service.yml
-
-
-exit
-
-
-
-exit;
-
-export NAME="PROVA"
-export FILE="./test/main/main.yml"
-export TEMPLATE="./test/template/service.yml"
-export VALUES="./test/main/main.values.yml"
-yq e '.ports[]' $VALUES
-VARS=$(yq eval '.. | select((tag == "!!map" or tag == "!!seq") | not) | (path | join("_")) + "=" + .' $VALUES | sed 's/: /=/')
-
-for fn in $VARS; do 
-    export $fn;
-done
+if [ "${COMMAND}" = 'deploy' ]; then
+  deploy_app
+fi;
 
 
 
-
-
-# templating
-./bash-tpl.sh $TEMPLATE > ./step0.yml.sh
-sh  ./step0.yml.sh >  ./step1.yml
-# merge
-yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)'  ./step1.yml $FILE  > ./step2.yml
-cat ./step2.yml
-envsubst < ./step2.yml > ./step3.yml
 
  
  
+

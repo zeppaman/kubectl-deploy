@@ -1,7 +1,15 @@
 name: "prova"
 imageName: "provina"
 containerName: "provina-1"
+replicas: 2
 ports: 
   - 80804
   - 8081
   - 89081
+environment:
+  - key:value
+configMap:
+  - map:key
+endpoints:
+  - mywwbsite.org:80804
+    

@@ -3,12 +3,12 @@ kind: Deployment
 metadata:
   name: <% $NAME %>
 spec:
-  replicas: 1
+  replicas: <% $(yq e '.replicas' $VALUES) %>
   selector:
     matchLabels:
       app: ${name}
   strategy:
-    type: RollingUpdatefgfh
+    type: RollingUpdate
   template:
     metadata:
       labels:
@@ -20,6 +20,20 @@ spec:
         imagePullPolicy: Always
         ports:
          - containerPort: 8000
+        env:
+        - name: MADE_WITH
+          value: KUBE-DEPLOY - https://github.com/zeppaman/kubectl-deploy
+          % for fn in `yq e '.environment[]' $VALUES`; do
+        - name: <%${fn%:*}%>
+          value: <%${fn#*:}%>
+          % done
+          % for fn2 in `yq e '.configMap[]' $VALUES`; do
+        - name: <%${fn2#*:}%>
+          valueFrom:
+            configMapKeyRef:
+              name: <%${fn2#*:}%>
+              key: <%${fn2%:*}%>
+          % done
 ---   
 apiVersion: v1
 kind: Service
@@ -36,10 +50,27 @@ spec:
   - port: <%$fn%>
     targetPort: <%$fn%>
     protocol: TCP
-    #PROVA DONE
      % done
-  
   selector:
     app: <%$NAME%>
-
-
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: <%$NAME%>-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+   % for host in `yq e '.endpoints[]' $VALUES`; do
+   - host: <%${fn2%:*}%>
+     http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: <%$NAME%>-service
+            port:
+              number: <%${host#*:}%>
+    % done
